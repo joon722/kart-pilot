@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KART PILOT · 미션 2</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #161b22; --line: #2a313c; --fg: #e6edf3; --sub: #8b96a5;
+    --go: #3fb950; --boost: #f0883e; --brake: #f85149; --rev: #a371f7; --drift: #58a6ff; --key: #232a33;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 "Malgun Gothic", system-ui, sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 18px 16px 28px; display: grid; gap: 14px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 22px; letter-spacing: .5px; }
+  h1 small { color: var(--sub); font-weight: 400; font-size: 13px; margin-left: 8px; }
+  button { font: inherit; color: var(--fg); background: var(--key); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+  button:hover { border-color: #3d4654; }
+  #connect.on { background: #12361d; border-color: var(--go); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  #status { color: var(--sub); }
+  #status.warn { color: var(--brake); }
+  .dash { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; }
+  @media (max-width: 760px) { .dash { grid-template-columns: 1fr; } }
+  .mode { font-size: 40px; font-weight: 800; letter-spacing: 1px; }
+  .mode.coast { color: var(--sub); } .mode.drive { color: var(--go); } .mode.slow { color: var(--boost); }
+  .mode.brake { color: var(--brake); } .mode.reverse { color: var(--rev); } .mode.pivot { color: var(--drift); }
+  .speed { height: 18px; background: var(--key); border-radius: 9px; position: relative; overflow: hidden; margin-top: 8px; }
+  .speed i { position: absolute; top: 0; bottom: 0; left: 50%; width: 0; background: var(--go); }
+  .speed::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--line); }
+  .wheels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  .wheel { text-align: center; }
+  .wheel .bar { height: 120px; width: 34px; margin: 6px auto; background: var(--key); border-radius: 8px; position: relative; overflow: hidden; }
+  .wheel .bar i { position: absolute; left: 0; right: 0; bottom: 50%; height: 0; background: var(--go); }
+  .wheel .bar::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; background: var(--line); }
+  .wheel b { font-variant-numeric: tabular-nums; font-size: 18px; }
+  .keys { display: grid; grid-template-columns: repeat(3, 64px); grid-template-rows: 56px 56px; gap: 6px; justify-content: center; margin: 4px 0 10px; }
+  .k { display: grid; place-items: center; background: var(--key); border: 1px solid var(--line); border-radius: 8px; font-size: 20px; }
+  .k.on { background: #1f6feb; border-color: #58a6ff; }
+  .k.up { grid-column: 2; } .k.left { grid-column: 1; grid-row: 2; } .k.down { grid-column: 2; grid-row: 2; } .k.right { grid-column: 3; grid-row: 2; }
+  .mods { display: flex; gap: 8px; justify-content: center; }
+  .mods .k { padding: 6px 14px; font-size: 14px; }
+  .mods .k.on.shift { background: #6e3a12; border-color: var(--boost); }
+  .help { color: var(--sub); font-size: 14px; }
+  .help b { color: var(--fg); }
+  table.help-table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  .help-table td { padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .help-table td:first-child { white-space: nowrap; color: var(--fg); font-weight: 700; }
+  .tune { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px 18px; }
+  .tune label { display: grid; gap: 2px; font-size: 13px; color: var(--sub); }
+  .tune label span { display: flex; justify-content: space-between; }
+  .tune label b { color: var(--fg); font-variant-numeric: tabular-nums; }
+  .tune input { width: 100%; accent-color: #58a6ff; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+  .ping { font-variant-numeric: tabular-nums; color: var(--sub); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>KART PILOT <small>미션 2 · 노트북 키보드 조종 (HM-10)</small></h1>
+    <div class="row">
+      <span class="ping" id="ping">연결 안 됨 · 연습 모드</span>
+      <button id="connect">차량 연결</button>
+    </div>
+  </header>
+
+  <div class="card"><span id="status">연결하지 않아도 키를 눌러 연습할 수 있어요. (연습 모드: 화면에만 표시)</span></div>
+
+  <section class="dash">
+    <div class="card">
+      <div class="mode coast" id="mode">정지 (굴러감)</div>
+      <div class="speed"><i id="speedbar"></i></div>
+      <div class="wheels">
+        <div class="wheel">왼쪽 바퀴<div class="bar"><i id="barL"></i></div><b id="valL">0</b></div>
+        <div class="wheel">오른쪽 바퀴<div class="bar"><i id="barR"></i></div><b id="valR">0</b></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="keys">
+        <div class="k up" id="kUp">↑</div>
+        <div class="k left" id="kLeft">←</div>
+        <div class="k down" id="kDown">↓</div>
+        <div class="k right" id="kRight">→</div>
+      </div>
+      <div class="mods"><div class="k shift" id="kShift">Shift 저속</div></div>
+      <table class="help-table" style="margin-top:12px">
+        <tr><td>↑</td><td><b>최고 속도</b></td></tr>
+        <tr><td>↑ + Shift</td><td>저속 (주차·정밀 조종)</td></tr>
+        <tr><td>↓</td><td>달리는 중이면 <b>브레이크</b>, 멈추면 <b>후진</b></td></tr>
+        <tr><td>↑ + ← →</td><td>코너</td></tr>
+        <tr><td>← → 만</td><td>제자리 회전</td></tr>
+        <tr><td>손 뗌</td><td>힘 끔 (굴러가다 섬) · Esc 비상 정지</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <div class="card">
+    <div class="row" style="margin-bottom:10px">
+      <strong>세팅 (이 노트북에 저장됨)</strong>
+      <button id="reset">기본값으로</button>
+    </div>
+    <div class="tune" id="tune"></div>
+    <p class="help" style="margin:12px 0 0">
+      <b>직진 보정</b>: 똑바로 안 가면 조절해요. 오른쪽으로 휘면 + 쪽, 왼쪽으로 휘면 − 쪽.
+      빠를 때(↑)와 느릴 때(Shift 저속)를 따로 맞추면 그 사이는 자동으로 섞여요. 미션 1에서 맞춘 값: 최고 속도 −11.
+    </p>
+  </div>
+</main>
+
+<script>
+// ---------------- 세팅 ----------------
+const DEFAULTS = {
+  top: 100,         // ↑ 최고 속도 (%)
+  slow: 45,         // ↑+Shift 저속 (%)
+  accelMs: 100,     // 0→최고까지 시간 (미션 2는 확 튀어 나가게. 출발 때 틀어지면 늘리기)
+  cornerInner: 15,  // 코너: 안쪽 바퀴 = 바깥의 몇 % (낮을수록 많이 꺾임)
+  pivot: 40,        // 제자리 회전 세기 (%)
+  reverse: 55,      // 후진 속도 (%)
+  brakePower: 70,   // 브레이크 세기 (%)
+  brakeMs: 180,     // 최고 속도에서 브레이크 시간 (느리면 비례해서 짧게)
+  minPwm: 90,       // 이보다 약하면 바퀴가 안 굴러감
+  trimHigh: -12,    // 직진 보정 (빠를 때, 오른쪽 바퀴 PWM 더하기). 실측: −11 왼쪽 3~5도, −15 오른쪽으로 원
+  trimLow: 15,      // 직진 보정 (느릴 때). 미션 1: 오른쪽은 힘을 덜 주면 확 약해짐 (200/178에서 오른쪽으로 말림)
+};
+const SLIDERS = [
+  ['top', '↑ 최고 속도', 50, 100, 1, '%'],
+  ['slow', '↑+Shift 저속', 20, 80, 1, '%'],
+  ['accelMs', '가속 시간 (0 = 바로 최고)', 0, 800, 10, 'ms'],
+  ['cornerInner', '코너 안쪽 바퀴 (낮을수록 많이 꺾임)', 0, 90, 1, '%'],
+  ['pivot', '제자리 회전 세기', 20, 100, 1, '%'],
+  ['reverse', '후진 속도', 20, 100, 1, '%'],
+  ['brakePower', '브레이크 세기', 20, 100, 1, '%'],
+  ['brakeMs', '브레이크 시간(최고속 기준)', 0, 400, 10, 'ms'],
+  ['minPwm', '최소 PWM', 0, 160, 1, ''],
+  ['trimHigh', '직진 보정 · 빠를 때', -40, 40, 1, ''],
+  ['trimLow', '직진 보정 · 느릴 때', -40, 60, 1, ''],
+];
+const STORE = 'kartPilotSettings.v3';
+let P = { ...DEFAULTS };
+try { Object.assign(P, JSON.parse(localStorage.getItem(STORE) || '{}')); } catch {}
+const save = () => { try { localStorage.setItem(STORE, JSON.stringify(P)); } catch {} };
+
+const $ = id => document.getElementById(id);
+function buildTune() {
+  const box = $('tune'); box.innerHTML = '';
+  for (const [key, label, min, max, step, unit] of SLIDERS) {
+    const l = document.createElement('label');
+    l.innerHTML = `<span>${label}<b id="v_${key}">${P[key]}${unit}</b></span>`;
+    const r = document.createElement('input');
+    Object.assign(r, { type: 'range', min, max, step, value: P[key] });
+    r.addEventListener('input', () => { P[key] = Number(r.value); $('v_' + key).textContent = P[key] + unit; save(); });
+    // 슬라이더가 화살표 키를 먹지 않게
+    r.addEventListener('keydown', e => { if (e.key.startsWith('Arrow')) { e.preventDefault(); r.blur(); } });
+    l.appendChild(r); box.appendChild(l);
+  }
+}
+$('reset').addEventListener('click', () => { P = { ...DEFAULTS }; save(); buildTune(); });
+buildTune();
+
+// ---------------- 키보드 ----------------
+const K = new Set();
+const USED = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight'];
+window.addEventListener('keydown', e => {
+  if (e.code === 'Escape') { emergency(); return; }
+  if (USED.includes(e.code)) { e.preventDefault(); K.add(e.code); }
+});
+window.addEventListener('keyup', e => { if (USED.includes(e.code)) { e.preventDefault(); K.delete(e.code); } });
+// 창을 벗어나면 키가 눌린 채로 남지 않게 전부 놓음
+window.addEventListener('blur', () => K.clear());
+document.addEventListener('visibilitychange', () => { if (document.hidden) K.clear(); });
+
+// ---------------- 주행 계산 (카트라이더식) ----------------
+const st = { v: 0, vEst: 0, steer: 0, brakeEnd: 0, braking: false, revOk: false };
+const STEER_RATE = 9;     // 조향이 0→끝까지 가는 빠르기 (/초)
+const COAST_DECAY = 1.6;  // 손 뗐을 때 실제 차가 느려지는 정도 추정 (/초)
+const approach = (x, t, d) => x < t ? Math.min(t, x + d) : Math.max(t, x - d);
+let modeName = 'coast';
+
+function compute(now, dt) {
+  const up = K.has('ArrowUp'), down = K.has('ArrowDown');
+  const left = K.has('ArrowLeft'), right = K.has('ArrowRight');
+  const shift = K.has('ShiftLeft') || K.has('ShiftRight');
+  const steerTarget = (right ? 1 : 0) - (left ? 1 : 0);
+  st.steer = approach(st.steer, steerTarget, STEER_RATE * dt);
+
+  let mode;
+  if (up && !down) {
+    if (st.v < 0) st.v = 0;   // 후진 중이었으면 일단 0부터
+    const target = (shift ? P.slow : P.top) / 100;
+    const rate = 1000 / P.accelMs;
+    st.v = st.v > target ? approach(st.v, target, 2 * rate * dt) : approach(st.v, target, rate * dt);
+    st.braking = false; st.revOk = false;
+    mode = shift ? 'slow' : 'drive';
+    st.vEst = approach(st.vEst, st.v, 3 * dt);
+  } else if (down && !up) {
+    if (!st.revOk && !st.braking) {
+      // ↓를 막 눌렀을 때: 앞으로 달리는 중이면 브레이크부터
+      if (st.vEst > 0.08 && P.brakeMs > 0) { st.braking = true; st.brakeEnd = now + P.brakeMs * Math.min(1, st.vEst); }
+      else st.revOk = true;
+    }
+    if (st.braking) {
+      if (now < st.brakeEnd) { mode = 'brake'; st.v = 0; st.vEst = approach(st.vEst, 0, 6 * dt); }
+      else { st.braking = false; st.revOk = true; st.vEst = 0; }
+    }
+    if (st.revOk) {
+      st.v = approach(Math.min(st.v, 0), -P.reverse / 100, (1000 / P.accelMs) * dt);
+      st.vEst = st.v;
+      mode = 'reverse';
+    }
+  } else {
+    // 손 뗌(또는 ↑↓ 같이): 힘 끔, 차는 굴러가다 섬
+    st.v = 0; st.braking = false; st.revOk = false;
+    st.vEst = approach(st.vEst, 0, COAST_DECAY * dt);
+    mode = 'coast';
+  }
+
+  // 좌우 바퀴로 나누기 (-1 ~ 1)
+  let L = 0, R = 0;
+  if (mode === 'brake') {
+    L = R = -P.brakePower / 100;
+  } else if (Math.abs(st.v) < 0.02) {
+    if ((left || right) && st.steer !== 0) {
+      const p = (P.pivot / 100) * Math.abs(st.steer);
+      L = p * Math.sign(st.steer); R = -L;   // →: 왼쪽 앞으로, 오른쪽 뒤로
+      mode = 'pivot';
+    }
+  } else {
+    const innerRatio = 1 + (P.cornerInner / 100 - 1) * Math.abs(st.steer);
+    const outer = st.v, inner = st.v * innerRatio;
+    if (st.steer > 0) { L = outer; R = inner; }
+    else if (st.steer < 0) { L = inner; R = outer; }
+    else { L = R = st.v; }
+  }
+  modeName = mode;
+  return [toPwm(L, false), toPwm(R, true)];
+}
+
+// -1~1 → -255~255. 최소 PWM과 오른쪽 바퀴 직진 보정(빠를수록 trimHigh, 느릴수록 trimLow)
+function toPwm(x, isRight) {
+  const a = Math.abs(x);
+  if (a < 0.02) return 0;
+  let p = P.minPwm + (255 - P.minPwm) * a;
+  if (isRight) p += P.trimLow + (P.trimHigh - P.trimLow) * a;
+  p = Math.max(0, Math.min(255, Math.round(p)));
+  return Math.sign(x) * p;
+}
+
+function emergency() { K.clear(); st.v = 0; st.vEst = 0; st.braking = false; st.revOk = false; status('비상 정지 (Esc)'); }
+
+// ---------------- 블루투스 (HM-10: FFE0 / FFE1) ----------------
+let device = null, ch = null, busy = false, seq = 0, lastAck = 0, connected = false;
+const sentAt = new Map();
+let rx = '';
+
+function status(t, warn = false) { const s = $('status'); s.textContent = t; s.classList.toggle('warn', warn); }
+
+function frameBytes(n, l, r) {
+  const b = new Uint8Array(10);
+  b[0] = 0xA5; b[1] = 0x5A; b[2] = n & 255; b[3] = (n >> 8) & 255;
+  b[4] = l & 255; b[5] = (l >> 8) & 255; b[6] = r & 255; b[7] = (r >> 8) & 255;
+  let x = 0; for (let i = 2; i < 8; i++) x ^= b[i];
+  b[8] = x; b[9] = 10;
+  return b;
+}
+
+async function send(l, r) {
+  if (!ch || busy) return;   // 한 번에 하나만 (밀린 명령이 쌓이지 않게)
+  busy = true;
+  seq = (seq + 1) & 0xffff;
+  sentAt.set(seq, performance.now());
+  if (sentAt.size > 64) sentAt.delete(sentAt.keys().next().value);
+  try {
+    const b = frameBytes(seq, l, r);
+    if (ch.properties.writeWithoutResponse) await ch.writeValueWithoutResponse(b);
+    else await ch.writeValue(b);
+  } catch (e) { status('전송 오류: ' + e.message, true); }
+  finally { busy = false; }
+}
+
+function onNotify(e) {
+  const v = e.target.value;
+  for (let i = 0; i < v.byteLength; i++) {
+    const c = v.getUint8(i);
+    if (c === 10) {
+      const m = /^A,(\d+)/.exec(rx.trim()); rx = '';
+      if (m) {
+        lastAck = performance.now();
+        const t = sentAt.get(Number(m[1]));
+        if (t) $('ping').textContent = `연결됨 · 응답 ${Math.round(lastAck - t)}ms`;
+      }
+    } else if (rx.length < 40) rx += String.fromCharCode(c);
+  }
+}
+
+async function connect() {
+  if (connected) { await disconnect(); return; }
+  if (!navigator.bluetooth) { status('이 브라우저는 블루투스를 못 써요. 노트북 크롬이나 엣지로 열어 주세요. (아이폰 사파리는 안 됨)', true); return; }
+  try {
+    status('목록에서 HM-10(조 이름)을 고르세요.');
+    device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: [0xffe0] });
+    device.addEventListener('gattserverdisconnected', () => { connected = false; ch = null; uiConn(); status('블루투스 연결이 끊겼어요. 다시 연결하세요.', true); });
+    const server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(0xffe0);
+    ch = await svc.getCharacteristic(0xffe1);
+    await ch.startNotifications();
+    ch.addEventListener('characteristicvaluechanged', onNotify);
+    connected = true; lastAck = performance.now(); uiConn();
+    status(`${device.name || 'HM-10'} 연결됨 · 바퀴를 띄우고 ↑로 방향부터 확인하세요.`);
+  } catch (e) { status(e.name === 'NotFoundError' ? '선택을 취소했어요.' : '연결 실패: ' + e.message, true); }
+}
+async function disconnect() {
+  K.clear();
+  for (let i = 0; i < 3; i++) { await send(0, 0); await new Promise(r => setTimeout(r, 40)); }
+  try { device?.gatt?.disconnect(); } catch {}
+  connected = false; ch = null; uiConn(); status('연결 해제 · 차 정지');
+}
+function uiConn() {
+  $('connect').textContent = connected ? '연결 해제' : '차량 연결';
+  $('connect').classList.toggle('on', connected);
+  if (!connected) $('ping').textContent = '연결 안 됨 · 연습 모드';
+}
+$('connect').addEventListener('click', () => { $('connect').blur(); connect(); });
+
+// ---------------- 화면 ----------------
+const NAMES = { coast: '정지 (굴러감)', drive: '최고 속도', slow: '저속', brake: '브레이크', reverse: '후진', pivot: '제자리 회전' };
+const COLORS = { coast: 'var(--sub)', drive: 'var(--go)', slow: 'var(--boost)', brake: 'var(--brake)', reverse: 'var(--rev)', pivot: 'var(--drift)' };
+function bar(el, v) {   // 세로 막대: 가운데 기준 위(전진)/아래(후진)
+  const h = Math.abs(v) / 255 * 50;
+  el.style.height = h + '%';
+  el.style.bottom = v >= 0 ? '50%' : (50 - h) + '%';
+  el.style.background = v >= 0 ? 'var(--go)' : 'var(--rev)';
+}
+function draw(l, r) {
+  const m = $('mode'); m.textContent = NAMES[modeName]; m.className = 'mode ' + modeName;
+  const s = $('speedbar'), w = Math.abs(st.vEst) * 50;
+  s.style.width = w + '%'; s.style.left = st.vEst >= 0 ? '50%' : (50 - w) + '%';
+  s.style.background = COLORS[modeName];
+  bar($('barL'), l); bar($('barR'), r);
+  $('valL').textContent = l; $('valR').textContent = r;
+  $('kUp').classList.toggle('on', K.has('ArrowUp')); $('kDown').classList.toggle('on', K.has('ArrowDown'));
+  $('kLeft').classList.toggle('on', K.has('ArrowLeft')); $('kRight').classList.toggle('on', K.has('ArrowRight'));
+  $('kShift').classList.toggle('on', K.has('ShiftLeft') || K.has('ShiftRight'));
+}
+
+// ---------------- 25번/초 반복 ----------------
+let lastT = performance.now();
+setInterval(() => {
+  const now = performance.now(), dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
+  const [l, r] = compute(now, dt);
+  draw(l, r);
+  if (connected) {
+    send(l, r);   // 같은 값도 계속 보냄 (0.35초 끊기면 차가 스스로 섬)
+    if (now - lastAck > 1200) status('차 응답이 없어요. 전원·배선·업로드를 확인하세요.', true);
+  }
+}, 40);
+
+// 페이지를 닫을 때 정지 명령
+window.addEventListener('pagehide', () => { if (ch) { try { ch.writeValueWithoutResponse(frameBytes((seq + 1) & 0xffff, 0, 0)); } catch {} } });
+</script>
+</body>
+</html>
