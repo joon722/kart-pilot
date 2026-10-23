@@ -111,6 +111,19 @@
 </main>
 
 <script>
+// ---------------- 방향키 / WASD (주소에 ?wasd가 있으면 WASD, wasd.html이 여기로 보냄) ----------------
+const WASD = new URLSearchParams(location.search).has('wasd');
+const KEYS = WASD
+  ? { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD' }
+  : { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
+const keyText = s => WASD ? s.replace(/[↑↓←→]/g, c => ({ '↑': 'W', '↓': 'S', '←': 'A', '→': 'D' })[c]) : s;
+if (WASD) {
+  document.title = 'KART PILOT · WASD';
+  document.querySelector('h1 small').textContent += ' · WASD';
+  const w = document.createTreeWalker(document.querySelector('main'), NodeFilter.SHOW_TEXT);
+  while (w.nextNode()) w.currentNode.nodeValue = keyText(w.currentNode.nodeValue);
+}
+
 // ---------------- 세팅 ----------------
 const DEFAULTS = {
   top: 100,         // ↑ 최고 속도 (%)
@@ -148,7 +161,7 @@ function buildTune() {
   const box = $('tune'); box.innerHTML = '';
   for (const [key, label, min, max, step, unit] of SLIDERS) {
     const l = document.createElement('label');
-    l.innerHTML = `<span>${label}<b id="v_${key}">${P[key]}${unit}</b></span>`;
+    l.innerHTML = `<span>${keyText(label)}<b id="v_${key}">${P[key]}${unit}</b></span>`;
     const r = document.createElement('input');
     Object.assign(r, { type: 'range', min, max, step, value: P[key] });
     r.addEventListener('input', () => { P[key] = Number(r.value); $('v_' + key).textContent = P[key] + unit; save(); });
@@ -162,7 +175,7 @@ buildTune();
 
 // ---------------- 키보드 ----------------
 const K = new Set();
-const USED = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight'];
+const USED = [KEYS.up, KEYS.down, KEYS.left, KEYS.right, 'ShiftLeft', 'ShiftRight'];
 window.addEventListener('keydown', e => {
   if (e.code === 'Escape') { emergency(); return; }
   if (USED.includes(e.code)) { e.preventDefault(); K.add(e.code); }
@@ -180,8 +193,8 @@ const approach = (x, t, d) => x < t ? Math.min(t, x + d) : Math.max(t, x - d);
 let modeName = 'coast';
 
 function compute(now, dt) {
-  const up = K.has('ArrowUp'), down = K.has('ArrowDown');
-  const left = K.has('ArrowLeft'), right = K.has('ArrowRight');
+  const up = K.has(KEYS.up), down = K.has(KEYS.down);
+  const left = K.has(KEYS.left), right = K.has(KEYS.right);
   const shift = K.has('ShiftLeft') || K.has('ShiftRight');
   const steerTarget = (right ? 1 : 0) - (left ? 1 : 0);
   st.steer = approach(st.steer, steerTarget, STEER_RATE * dt);
@@ -308,7 +321,7 @@ async function connect() {
     await ch.startNotifications();
     ch.addEventListener('characteristicvaluechanged', onNotify);
     connected = true; lastAck = performance.now(); uiConn();
-    status(`${device.name || 'HM-10'} 연결됨 · 바퀴를 띄우고 ↑로 방향부터 확인하세요.`);
+    status(`${device.name || 'HM-10'} 연결됨 · 바퀴를 띄우고 ${keyText('↑')}로 방향부터 확인하세요.`);
   } catch (e) { status(e.name === 'NotFoundError' ? '선택을 취소했어요.' : '연결 실패: ' + e.message, true); }
 }
 async function disconnect() {
@@ -340,8 +353,8 @@ function draw(l, r) {
   s.style.background = COLORS[modeName];
   bar($('barL'), l); bar($('barR'), r);
   $('valL').textContent = l; $('valR').textContent = r;
-  $('kUp').classList.toggle('on', K.has('ArrowUp')); $('kDown').classList.toggle('on', K.has('ArrowDown'));
-  $('kLeft').classList.toggle('on', K.has('ArrowLeft')); $('kRight').classList.toggle('on', K.has('ArrowRight'));
+  $('kUp').classList.toggle('on', K.has(KEYS.up)); $('kDown').classList.toggle('on', K.has(KEYS.down));
+  $('kLeft').classList.toggle('on', K.has(KEYS.left)); $('kRight').classList.toggle('on', K.has(KEYS.right));
   $('kShift').classList.toggle('on', K.has('ShiftLeft') || K.has('ShiftRight'));
 }
 
