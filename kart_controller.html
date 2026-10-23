@@ -105,7 +105,8 @@
     <div class="tune" id="tune"></div>
     <p class="help" style="margin:12px 0 0">
       <b>직진 보정</b>: 똑바로 안 가면 조절해요. 오른쪽으로 휘면 + 쪽, 왼쪽으로 휘면 − 쪽.
-      빠를 때(↑)와 느릴 때(Shift 저속)를 따로 맞추면 그 사이는 자동으로 섞여요. 미션 1에서 맞춘 값: 최고 속도 −11.
+      빠를 때(↑)와 느릴 때(Shift 저속)를 따로 맞추면 그 사이는 자동으로 섞여요. 미션 1에서 맞춘 값: 최고 속도 −11.<br>
+      <b>왼쪽 모터 보정</b>: 왼쪽 바퀴에 모든 속도에서 더해요 (−면 왼쪽이 약해짐). 팀원 실측 직진 값: −10.
     </p>
   </div>
 </main>
@@ -137,6 +138,7 @@ const DEFAULTS = {
   minPwm: 90,       // 이보다 약하면 바퀴가 안 굴러감
   trimHigh: -12,    // 직진 보정 (빠를 때, 오른쪽 바퀴 PWM 더하기). 실측: −11 왼쪽 3~5도, −15 오른쪽으로 원
   trimLow: 15,      // 직진 보정 (느릴 때). 미션 1: 오른쪽은 힘을 덜 주면 확 약해짐 (200/178에서 오른쪽으로 말림)
+  leftTrim: -10,    // 왼쪽 모터 보정 (모든 속도에 더함). 팀원 실측: −10에서 직진 (최고 245/243, 저속 154/167)
 };
 const SLIDERS = [
   ['top', '↑ 최고 속도', 50, 100, 1, '%'],
@@ -150,6 +152,7 @@ const SLIDERS = [
   ['minPwm', '최소 PWM', 0, 160, 1, ''],
   ['trimHigh', '직진 보정 · 빠를 때', -40, 40, 1, ''],
   ['trimLow', '직진 보정 · 느릴 때', -40, 60, 1, ''],
+  ['leftTrim', '왼쪽 모터 보정 (모든 속도)', -40, 40, 1, ''],
 ];
 const STORE = 'kartPilotSettings.v3';
 let P = { ...DEFAULTS };
@@ -249,20 +252,23 @@ function compute(now, dt) {
   }
   modeName = mode;
   let l = toPwm(L, false), r = toPwm(R, true);
-  // 오른쪽이 255를 넘으면(+ 보정) 넘친 만큼 왼쪽을 줄임 → 최고 속도에서도 + 보정이 먹음
-  const over = Math.abs(r) - 255;
-  if (over > 0) { r = Math.sign(r) * 255; l = Math.sign(l) * Math.max(0, Math.abs(l) - over); }
+  // 한쪽이 255를 넘으면(+ 보정) 넘친 만큼 양쪽을 줄임 → 최고 속도에서도 + 보정이 먹음
+  const over = Math.max(Math.abs(l), Math.abs(r)) - 255;
+  if (over > 0) {
+    l = Math.sign(l) * Math.max(0, Math.abs(l) - over);
+    r = Math.sign(r) * Math.max(0, Math.abs(r) - over);
+  }
   return [l, r];
 }
 
-// -1~1 → -255~255. 최소 PWM과 오른쪽 바퀴 직진 보정(빠를수록 trimHigh, 느릴수록 trimLow)
-// 오른쪽은 255를 넘을 수 있음 (넘친 만큼은 compute에서 왼쪽을 줄임)
+// -1~1 → -255~255. 최소 PWM과 직진 보정(오른쪽: 빠를수록 trimHigh, 느릴수록 trimLow / 왼쪽: leftTrim)
+// 255를 넘을 수 있음 (넘친 만큼은 compute에서 양쪽을 줄임)
 function toPwm(x, isRight) {
   const a = Math.abs(x);
   if (a < 0.02) return 0;
   let p = P.minPwm + (255 - P.minPwm) * a;
-  if (isRight) p += P.trimLow + (P.trimHigh - P.trimLow) * a;
-  p = Math.max(0, Math.min(isRight ? 255 + 60 : 255, Math.round(p)));
+  p += isRight ? P.trimLow + (P.trimHigh - P.trimLow) * a : P.leftTrim;
+  p = Math.max(0, Math.min(255 + 100, Math.round(p)));
   return Math.sign(x) * p;
 }
 
