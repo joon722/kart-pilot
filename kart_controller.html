@@ -248,23 +248,28 @@ function compute(now, dt) {
     else { L = R = st.v; }
   }
   modeName = mode;
-  return [toPwm(L, false), toPwm(R, true)];
+  let l = toPwm(L, false), r = toPwm(R, true);
+  // 오른쪽이 255를 넘으면(+ 보정) 넘친 만큼 왼쪽을 줄임 → 최고 속도에서도 + 보정이 먹음
+  const over = Math.abs(r) - 255;
+  if (over > 0) { r = Math.sign(r) * 255; l = Math.sign(l) * Math.max(0, Math.abs(l) - over); }
+  return [l, r];
 }
 
 // -1~1 → -255~255. 최소 PWM과 오른쪽 바퀴 직진 보정(빠를수록 trimHigh, 느릴수록 trimLow)
+// 오른쪽은 255를 넘을 수 있음 (넘친 만큼은 compute에서 왼쪽을 줄임)
 function toPwm(x, isRight) {
   const a = Math.abs(x);
   if (a < 0.02) return 0;
   let p = P.minPwm + (255 - P.minPwm) * a;
   if (isRight) p += P.trimLow + (P.trimHigh - P.trimLow) * a;
-  p = Math.max(0, Math.min(255, Math.round(p)));
+  p = Math.max(0, Math.min(isRight ? 255 + 60 : 255, Math.round(p)));
   return Math.sign(x) * p;
 }
 
 function emergency() { K.clear(); st.v = 0; st.vEst = 0; st.braking = false; st.revOk = false; status('비상 정지 (Esc)'); }
 
 // ---------------- 블루투스 (HM-10: FFE0 / FFE1) ----------------
-let device = null, ch = null, busy = false, seq = 0, lastAck = 0, connected = false;
+let device = null, ch = null, busy = false, seq = 0, lastAck = 0, connected = false, cuts = null;
 const sentAt = new Map();
 let rx = '';
 
@@ -298,11 +303,17 @@ function onNotify(e) {
   for (let i = 0; i < v.byteLength; i++) {
     const c = v.getUint8(i);
     if (c === 10) {
-      const m = /^A,(\d+)/.exec(rx.trim()); rx = '';
+      // "A,번호" 또는 "A,번호,끊김횟수" (끊김 = 명령이 0.35초 안 와서 차가 스스로 멈춘 횟수)
+      const m = /^A,(\d+)(?:,(\d+))?/.exec(rx.trim()); rx = '';
       if (m) {
         lastAck = performance.now();
+        if (m[2] !== undefined) {
+          const n = Number(m[2]);
+          if (cuts !== null && n > cuts) status(`방금 통신이 끊겨서 차가 잠깐 멈췄어요 (끊김 ${n}회)`, true);
+          cuts = n;
+        }
         const t = sentAt.get(Number(m[1]));
-        if (t) $('ping').textContent = `연결됨 · 응답 ${Math.round(lastAck - t)}ms`;
+        if (t) $('ping').textContent = `연결됨 · 응답 ${Math.round(lastAck - t)}ms` + (cuts !== null ? ` · 끊김 ${cuts}회` : '');
       }
     } else if (rx.length < 40) rx += String.fromCharCode(c);
   }
@@ -320,7 +331,7 @@ async function connect() {
     ch = await svc.getCharacteristic(0xffe1);
     await ch.startNotifications();
     ch.addEventListener('characteristicvaluechanged', onNotify);
-    connected = true; lastAck = performance.now(); uiConn();
+    connected = true; lastAck = performance.now(); cuts = null; uiConn();
     status(`${device.name || 'HM-10'} 연결됨 · 바퀴를 띄우고 ${keyText('↑')}로 방향부터 확인하세요.`);
   } catch (e) { status(e.name === 'NotFoundError' ? '선택을 취소했어요.' : '연결 실패: ' + e.message, true); }
 }
