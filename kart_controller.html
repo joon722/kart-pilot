@@ -156,7 +156,14 @@ const SLIDERS = [
 ];
 const STORE = 'kartPilotSettings.v3';
 let P = { ...DEFAULTS };
-try { Object.assign(P, JSON.parse(localStorage.getItem(STORE) || '{}')); } catch {}
+try {
+  const saved = JSON.parse(localStorage.getItem(STORE) || '{}');
+  // 예전 기본 보정값(빠를 때 −12 / 느릴 때 +15 / 왼쪽 −10)이 그대로 저장돼 있으면 지워서 새 기본값을 씀
+  if (saved.trimHigh === -12 && saved.trimLow === 15 && (saved.leftTrim === undefined || saved.leftTrim === -10)) {
+    delete saved.trimHigh; delete saved.trimLow; delete saved.leftTrim;
+  }
+  Object.assign(P, saved);
+} catch {}
 const save = () => { try { localStorage.setItem(STORE, JSON.stringify(P)); } catch {} };
 
 const $ = id => document.getElementById(id);
