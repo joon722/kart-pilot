@@ -139,6 +139,7 @@ const DEFAULTS = {
   trimHigh: -2,     // 직진 보정 (빠를 때, 오른쪽 바퀴 PWM 더하기). 팀원 실측 직진(245/243)과 같은 차이를 최고 힘으로: 255/253
   trimLow: 25,      // 직진 보정 (느릴 때). 미션 1: 오른쪽은 힘을 덜 주면 확 약해짐 → 저속 164/177 (팀원 154/167과 같은 차이)
   leftTrim: 0,      // 왼쪽 모터 보정 (모든 속도에 더함). 팀원 −10은 양쪽 속도만 낮춰서 0으로
+  trimVer: 2,       // 보정 기본값을 바꿀 때 올리면, 저장된 보정 3개가 한 번 새 기본값으로 바뀜
 };
 const SLIDERS = [
   ['top', '↑ 최고 속도', 50, 100, 1, '%'],
@@ -158,9 +159,9 @@ const STORE = 'kartPilotSettings.v3';
 let P = { ...DEFAULTS };
 try {
   const saved = JSON.parse(localStorage.getItem(STORE) || '{}');
-  // 예전 기본 보정값(빠를 때 −12 / 느릴 때 +15 / 왼쪽 −10)이 그대로 저장돼 있으면 지워서 새 기본값을 씀
-  if (saved.trimHigh === -12 && saved.trimLow === 15 && (saved.leftTrim === undefined || saved.leftTrim === -10)) {
-    delete saved.trimHigh; delete saved.trimLow; delete saved.leftTrim;
+  // 보정 기본값이 바뀌었으면(trimVer) 저장된 보정 3개를 지워서 새 기본값을 씀 (다른 슬라이더는 그대로)
+  if (saved.trimVer !== DEFAULTS.trimVer) {
+    delete saved.trimHigh; delete saved.trimLow; delete saved.leftTrim; delete saved.trimVer;
   }
   Object.assign(P, saved);
 } catch {}
