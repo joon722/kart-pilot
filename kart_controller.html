@@ -130,8 +130,8 @@ const DEFAULTS = {
   top: 100,         // ↑ 최고 속도 (%)
   slow: 45,         // ↑+Shift 저속 (%)
   accelMs: 100,     // 0→최고까지 시간 (미션 2는 확 튀어 나가게. 출발 때 틀어지면 늘리기)
-  cornerInner: 15,  // 코너: 안쪽 바퀴 = 바깥의 몇 % (낮을수록 많이 꺾임)
-  pivot: 40,        // 제자리 회전 세기 (%)
+  cornerInner: 40,  // 코너: 안쪽 바퀴 = 바깥의 몇 % (낮을수록 많이 꺾임). 15면 코너 속도가 약 70%로 떨어져서 40으로
+  pivot: 65,        // 제자리 회전 세기 (%). U턴을 빠르게 (40 → 65)
   reverse: 55,      // 후진 속도 (%)
   brakePower: 70,   // 브레이크 세기 (%)
   brakeMs: 180,     // 최고 속도에서 브레이크 시간 (느리면 비례해서 짧게)
@@ -140,6 +140,7 @@ const DEFAULTS = {
   trimLow: 25,      // 직진 보정 (느릴 때). 미션 1: 오른쪽은 힘을 덜 주면 확 약해짐 → 저속 164/177 (팀원 154/167과 같은 차이)
   leftTrim: 0,      // 왼쪽 모터 보정 (모든 속도에 더함). 팀원 −10은 양쪽 속도만 낮춰서 0으로
   trimVer: 2,       // 보정 기본값을 바꿀 때 올리면, 저장된 보정 3개가 한 번 새 기본값으로 바뀜
+  turnVer: 1,       // 회전 기본값을 바꿀 때 올리면, 저장된 코너·제자리 회전 값이 한 번 새 기본값으로 바뀜
 };
 const SLIDERS = [
   ['top', '↑ 최고 속도', 50, 100, 1, '%'],
@@ -162,6 +163,9 @@ try {
   // 보정 기본값이 바뀌었으면(trimVer) 저장된 보정 3개를 지워서 새 기본값을 씀 (다른 슬라이더는 그대로)
   if (saved.trimVer !== DEFAULTS.trimVer) {
     delete saved.trimHigh; delete saved.trimLow; delete saved.leftTrim; delete saved.trimVer;
+  }
+  if (saved.turnVer !== DEFAULTS.turnVer) {
+    delete saved.cornerInner; delete saved.pivot; delete saved.turnVer;
   }
   Object.assign(P, saved);
 } catch {}
