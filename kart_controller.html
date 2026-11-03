@@ -26,7 +26,7 @@
   @media (max-width: 760px) { .dash { grid-template-columns: 1fr; } }
   .mode { font-size: 40px; font-weight: 800; letter-spacing: 1px; }
   .mode.coast { color: var(--sub); } .mode.drive { color: var(--go); } .mode.slow { color: var(--boost); }
-  .mode.brake { color: var(--brake); } .mode.reverse { color: var(--rev); } .mode.pivot { color: var(--drift); }
+  .mode.brake { color: var(--brake); } .mode.reverse { color: var(--rev); } .mode.pivot, .mode.spin { color: var(--drift); }
   .speed { height: 18px; background: var(--key); border-radius: 9px; position: relative; overflow: hidden; margin-top: 8px; }
   .speed i { position: absolute; top: 0; bottom: 0; left: 50%; width: 0; background: var(--go); }
   .speed::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--line); }
@@ -92,6 +92,7 @@
         <tr><td>↓</td><td>달리는 중이면 <b>브레이크</b>, 멈추면 <b>후진</b></td></tr>
         <tr><td>↑ + ← →</td><td>코너</td></tr>
         <tr><td>← → 만</td><td>제자리 회전</td></tr>
+        <tr><td>X</td><td><b>제자리 180° 회전</b> (오른쪽으로 · 달리는 중이면 브레이크 먼저)</td></tr>
         <tr><td>손 뗌</td><td>힘 끔 (굴러가다 섬) · Esc 비상 정지</td></tr>
       </table>
     </div>
@@ -132,6 +133,7 @@ const DEFAULTS = {
   accelMs: 100,     // 0→최고까지 시간 (미션 2는 확 튀어 나가게. 출발 때 틀어지면 늘리기)
   cornerInner: 40,  // 코너: 안쪽 바퀴 = 바깥의 몇 % (낮을수록 많이 꺾임). 15면 코너 속도가 약 70%로 떨어져서 40으로
   pivot: 65,        // 제자리 회전 세기 (%). U턴을 빠르게 (40 → 65)
+  uturnMs: 500,     // X키 180° 회전 시간. 센서 없이 시간으로 도는 거라 건전지·바닥에 따라 실제로 맞춰야 함
   reverse: 55,      // 후진 속도 (%)
   brakePower: 70,   // 브레이크 세기 (%)
   brakeMs: 180,     // 최고 속도에서 브레이크 시간 (느리면 비례해서 짧게)
@@ -148,6 +150,7 @@ const SLIDERS = [
   ['accelMs', '가속 시간 (0 = 바로 최고)', 0, 800, 10, 'ms'],
   ['cornerInner', '코너 안쪽 바퀴 (낮을수록 많이 꺾임)', 0, 90, 1, '%'],
   ['pivot', '제자리 회전 세기', 20, 100, 1, '%'],
+  ['uturnMs', 'X키 180° 회전 시간', 100, 1500, 10, 'ms'],
   ['reverse', '후진 속도', 20, 100, 1, '%'],
   ['brakePower', '브레이크 세기', 20, 100, 1, '%'],
   ['brakeMs', '브레이크 시간(최고속 기준)', 0, 400, 10, 'ms'],
@@ -193,15 +196,22 @@ const K = new Set();
 const USED = [KEYS.up, KEYS.down, KEYS.left, KEYS.right, 'ShiftLeft', 'ShiftRight'];
 window.addEventListener('keydown', e => {
   if (e.code === 'Escape') { emergency(); return; }
+  if (e.code === 'KeyX') { if (!e.repeat && !st.spinEnd) startSpin(); return; }
   if (USED.includes(e.code)) { e.preventDefault(); K.add(e.code); }
 });
 window.addEventListener('keyup', e => { if (USED.includes(e.code)) { e.preventDefault(); K.delete(e.code); } });
 // 창을 벗어나면 키가 눌린 채로 남지 않게 전부 놓음
-window.addEventListener('blur', () => K.clear());
-document.addEventListener('visibilitychange', () => { if (document.hidden) K.clear(); });
+window.addEventListener('blur', () => { K.clear(); st.spinEnd = 0; });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { K.clear(); st.spinEnd = 0; } });
+
+// X키: 달리는 중이면 먼저 브레이크, 그다음 정해진 시간만큼 제자리 회전
+function startSpin() {
+  st.spinStart = performance.now() + (st.vEst > 0.08 ? P.brakeMs * Math.min(1, st.vEst) : 0);
+  st.spinEnd = st.spinStart + P.uturnMs;
+}
 
 // ---------------- 주행 계산 (카트라이더식) ----------------
-const st = { v: 0, vEst: 0, steer: 0, brakeEnd: 0, braking: false, revOk: false };
+const st = { v: 0, vEst: 0, steer: 0, brakeEnd: 0, braking: false, revOk: false, spinStart: 0, spinEnd: 0 };
 const STEER_RATE = 9;     // 조향이 0→끝까지 가는 빠르기 (/초)
 const COAST_DECAY = 1.6;  // 손 뗐을 때 실제 차가 느려지는 정도 추정 (/초)
 const approach = (x, t, d) => x < t ? Math.min(t, x + d) : Math.max(t, x - d);
@@ -215,7 +225,13 @@ function compute(now, dt) {
   st.steer = approach(st.steer, steerTarget, STEER_RATE * dt);
 
   let mode;
-  if (up && !down) {
+  // 회전이 끝나면 멈춘 상태로 돌아감 (↑를 누르고 있으면 바로 출발)
+  if (st.spinEnd && now >= st.spinEnd) { st.spinEnd = 0; st.v = 0; st.vEst = 0; st.steer = 0; }
+  if (st.spinEnd) {
+    st.v = 0; st.steer = 0; st.braking = false; st.revOk = false;
+    if (now < st.spinStart) { mode = 'brake'; st.vEst = approach(st.vEst, 0, 6 * dt); }
+    else { mode = 'spin'; st.vEst = 0; }
+  } else if (up && !down) {
     if (st.v < 0) st.v = 0;   // 후진 중이었으면 일단 0부터
     const target = (shift ? P.slow : P.top) / 100;
     const rate = 1000 / P.accelMs;
@@ -249,6 +265,8 @@ function compute(now, dt) {
   let L = 0, R = 0;
   if (mode === 'brake') {
     L = R = -P.brakePower / 100;
+  } else if (mode === 'spin') {
+    L = P.pivot / 100; R = -L;   // 오른쪽으로 돎
   } else if (Math.abs(st.v) < 0.02) {
     if ((left || right) && st.steer !== 0) {
       const p = (P.pivot / 100) * Math.abs(st.steer);
@@ -284,7 +302,7 @@ function toPwm(x, isRight) {
   return Math.sign(x) * p;
 }
 
-function emergency() { K.clear(); st.v = 0; st.vEst = 0; st.braking = false; st.revOk = false; status('비상 정지 (Esc)'); }
+function emergency() { K.clear(); st.v = 0; st.vEst = 0; st.braking = false; st.revOk = false; st.spinEnd = 0; status('비상 정지 (Esc)'); }
 
 // ---------------- 블루투스 (HM-10: FFE0 / FFE1) ----------------
 let device = null, ch = null, busy = false, seq = 0, lastAck = 0, connected = false, cuts = null;
@@ -367,8 +385,8 @@ function uiConn() {
 $('connect').addEventListener('click', () => { $('connect').blur(); connect(); });
 
 // ---------------- 화면 ----------------
-const NAMES = { coast: '정지 (굴러감)', drive: '최고 속도', slow: '저속', brake: '브레이크', reverse: '후진', pivot: '제자리 회전' };
-const COLORS = { coast: 'var(--sub)', drive: 'var(--go)', slow: 'var(--boost)', brake: 'var(--brake)', reverse: 'var(--rev)', pivot: 'var(--drift)' };
+const NAMES = { coast: '정지 (굴러감)', drive: '최고 속도', slow: '저속', brake: '브레이크', reverse: '후진', pivot: '제자리 회전', spin: '180° 회전' };
+const COLORS = { coast: 'var(--sub)', drive: 'var(--go)', slow: 'var(--boost)', brake: 'var(--brake)', reverse: 'var(--rev)', pivot: 'var(--drift)', spin: 'var(--drift)' };
 function bar(el, v) {   // 세로 막대: 가운데 기준 위(전진)/아래(후진)
   const h = Math.abs(v) / 255 * 50;
   el.style.height = h + '%';
