@@ -134,7 +134,7 @@ const DEFAULTS = {
   accelMs: 100,     // 0→최고까지 시간 (미션 2는 확 튀어 나가게. 출발 때 틀어지면 늘리기)
   cornerInner: 40,  // 코너: 안쪽 바퀴 = 바깥의 몇 % (낮을수록 많이 꺾임). 15면 코너 속도가 약 70%로 떨어져서 40으로
   pivot: 65,        // 제자리 회전 세기 (%). U턴을 빠르게 (40 → 65)
-  uturnMs: 380,     // C키 회전 시간. 500은 180°보다 더 돌아서 줄임. 센서 없이 시간으로 도는 거라 건전지·바닥에 따라 실제로 맞춰야 함
+  uturnMs: 330,     // C키 회전 시간. 실측: 500은 180°보다 더, 380(실제 360)은 원하는 각도보다 약 10° 더 돎. 센서 없이 시간으로 도는 거라 건전지·바닥에 따라 실제로 맞춰야 함
   nudgePower: 50,   // Z/X 5° 회전 세기 (%). 45 아래는 차 코드의 출발 킥(255) 때문에 오히려 세짐
   nudgeMs: 40,      // Z/X 5° 회전 시간. 명령을 40ms마다 보내서 40ms 단위
   reverse: 55,      // 후진 속도 (%)
@@ -146,7 +146,7 @@ const DEFAULTS = {
   leftTrim: 0,      // 왼쪽 모터 보정 (모든 속도에 더함). 팀원 −10은 양쪽 속도만 낮춰서 0으로
   trimVer: 2,       // 보정 기본값을 바꿀 때 올리면, 저장된 보정 3개가 한 번 새 기본값으로 바뀜
   turnVer: 1,       // 회전 기본값을 바꿀 때 올리면, 저장된 코너·제자리 회전 값이 한 번 새 기본값으로 바뀜
-  uturnVer: 1,      // C키 시간 기본값을 바꿀 때 올리면, 저장된 C키 시간이 한 번 새 기본값으로 바뀜
+  uturnVer: 2,      // C키 시간 기본값을 바꿀 때 올리면, 저장된 C키 시간이 한 번 새 기본값으로 바뀜
 };
 const SLIDERS = [
   ['top', '↑ 최고 속도', 50, 100, 1, '%'],
@@ -222,6 +222,9 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) { K.c
 function startSpin() {
   st.spinStart = performance.now() + (st.vEst > 0.08 ? P.brakeMs * Math.min(1, st.vEst) : 0);
   st.spinEnd = st.spinStart + P.uturnMs;
+  // 40ms 주기를 기다리지 않고 시작·끝에 바로 보내서 회전 시간을 정확하게
+  setTimeout(tick, st.spinStart - performance.now() + 1);
+  setTimeout(tick, st.spinEnd - performance.now() + 1);
 }
 
 // ---------------- 주행 계산 (카트라이더식) ----------------
@@ -340,8 +343,10 @@ function frameBytes(n, l, r) {
   return b;
 }
 
+let pending = null;
 async function send(l, r) {
-  if (!ch || busy) return;   // 한 번에 하나만 (밀린 명령이 쌓이지 않게)
+  if (!ch) return;
+  if (busy) { pending = [l, r]; return; }   // 한 번에 하나만, 보내는 중이면 가장 최신 값만 기억 (멈춤 명령이 빠지지 않게)
   busy = true;
   seq = (seq + 1) & 0xffff;
   sentAt.set(seq, performance.now());
@@ -351,7 +356,10 @@ async function send(l, r) {
     if (ch.properties.writeWithoutResponse) await ch.writeValueWithoutResponse(b);
     else await ch.writeValue(b);
   } catch (e) { status('전송 오류: ' + e.message, true); }
-  finally { busy = false; }
+  finally {
+    busy = false;
+    if (pending) { const [a, b] = pending; pending = null; send(a, b); }
+  }
 }
 
 function onNotify(e) {
@@ -427,7 +435,7 @@ function draw(l, r) {
 
 // ---------------- 25번/초 반복 ----------------
 let lastT = performance.now();
-setInterval(() => {
+function tick() {
   const now = performance.now(), dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
   const [l, r] = compute(now, dt);
   draw(l, r);
@@ -435,7 +443,8 @@ setInterval(() => {
     send(l, r);   // 같은 값도 계속 보냄 (0.35초 끊기면 차가 스스로 섬)
     if (now - lastAck > 1200) status('차 응답이 없어요. 전원·배선·업로드를 확인하세요.', true);
   }
-}, 40);
+}
+setInterval(tick, 40);
 
 // 페이지를 닫을 때 정지 명령
 window.addEventListener('pagehide', () => { if (ch) { try { ch.writeValueWithoutResponse(frameBytes((seq + 1) & 0xffff, 0, 0)); } catch {} } });
