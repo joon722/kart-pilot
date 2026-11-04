@@ -132,27 +132,32 @@ const DEFAULTS = {
   top: 100,         // ↑ 최고 속도 (%)
   slow: 45,         // ↑+Shift 저속 (%)
   accelMs: 100,     // 0→최고까지 시간 (미션 2는 확 튀어 나가게. 출발 때 틀어지면 늘리기)
-  cornerInner: 40,  // 코너: 안쪽 바퀴 = 바깥의 몇 % (낮을수록 많이 꺾임). 15면 코너 속도가 약 70%로 떨어져서 40으로
+  cornerInner: 60,  // 코너: 안쪽 바퀴 = 바깥의 몇 % (낮을수록 많이 꺾임). TB6612는 힘을 뺄 때 브레이크가 걸려서 40이면 미끄러짐
+  cornerSpeed: 85,  // 코너: 바깥 바퀴 속도 (%). 코너에서 조금 줄여서 안 미끄러지게
+  steerMs: 200,     // 달리면서 꺾일 때 끝까지 꺾이는 시간. 짧게 누르면 조금만 꺾임 (키를 떼면 바로 펴짐)
   pivot: 65,        // 제자리 회전 세기 (%). U턴을 빠르게 (40 → 65)
-  uturnMs: 330,     // C키 회전 시간. 실측: 500은 180°보다 더, 380(실제 360)은 원하는 각도보다 약 10° 더 돎. 센서 없이 시간으로 도는 거라 건전지·바닥에 따라 실제로 맞춰야 함
+  uturnMs: 340,     // C키 회전 시간. 실측: 500은 180°보다 더, 380(실제 360)은 약 10° 더, 330은 약 5° 덜 돎. 센서 없이 시간으로 도는 거라 건전지·바닥에 따라 실제로 맞춰야 함
   nudgePower: 50,   // Z/X 5° 회전 세기 (%). 45 아래는 차 코드의 출발 킥(255) 때문에 오히려 세짐
   nudgeMs: 40,      // Z/X 5° 회전 시간. 명령을 40ms마다 보내서 40ms 단위
   reverse: 55,      // 후진 속도 (%)
   brakePower: 70,   // 브레이크 세기 (%)
   brakeMs: 180,     // 최고 속도에서 브레이크 시간 (느리면 비례해서 짧게)
   minPwm: 90,       // 이보다 약하면 바퀴가 안 굴러감
-  trimHigh: -2,     // 직진 보정 (빠를 때, 오른쪽 바퀴 PWM 더하기). 팀원 실측 직진(245/243)과 같은 차이를 최고 힘으로: 255/253
-  trimLow: 25,      // 직진 보정 (느릴 때). 미션 1: 오른쪽은 힘을 덜 주면 확 약해짐 → 저속 164/177 (팀원 154/167과 같은 차이)
+  trimHigh: 5,      // 직진 보정 (빠를 때, 오른쪽 바퀴 PWM 더하기). DRI0039 실측: −2(255/253)에서 오른쪽으로 약 15° → 250/255
+  trimLow: 10,      // 직진 보정 (느릴 때). +25는 L293D 때 값이라 좌우 코너가 달라져서 줄임
   leftTrim: 0,      // 왼쪽 모터 보정 (모든 속도에 더함). 팀원 −10은 양쪽 속도만 낮춰서 0으로
-  trimVer: 2,       // 보정 기본값을 바꿀 때 올리면, 저장된 보정 3개가 한 번 새 기본값으로 바뀜
+  cornerVer: 1,     // 코너 기본값을 바꿀 때 올리면, 저장된 코너 값이 한 번 새 기본값으로 바뀜
+  trimVer: 3,       // 보정 기본값을 바꿀 때 올리면, 저장된 보정 3개가 한 번 새 기본값으로 바뀜
   turnVer: 1,       // 회전 기본값을 바꿀 때 올리면, 저장된 코너·제자리 회전 값이 한 번 새 기본값으로 바뀜
-  uturnVer: 2,      // C키 시간 기본값을 바꿀 때 올리면, 저장된 C키 시간이 한 번 새 기본값으로 바뀜
+  uturnVer: 3,      // C키 시간 기본값을 바꿀 때 올리면, 저장된 C키 시간이 한 번 새 기본값으로 바뀜
 };
 const SLIDERS = [
   ['top', '↑ 최고 속도', 50, 100, 1, '%'],
   ['slow', '↑+Shift 저속', 20, 80, 1, '%'],
   ['accelMs', '가속 시간 (0 = 바로 최고)', 0, 800, 10, 'ms'],
   ['cornerInner', '코너 안쪽 바퀴 (낮을수록 많이 꺾임)', 0, 90, 1, '%'],
+  ['cornerSpeed', '코너 바깥 바퀴 속도 (낮으면 덜 미끄러짐)', 50, 100, 1, '%'],
+  ['steerMs', '코너 꺾이는 시간 (길면 부드러움)', 40, 500, 20, 'ms'],
   ['pivot', '제자리 회전 세기', 20, 100, 1, '%'],
   ['uturnMs', 'C키 180° 회전 시간', 100, 1500, 10, 'ms'],
   ['nudgePower', 'Z/X 5° 회전 세기', 45, 100, 1, '%'],
@@ -172,6 +177,9 @@ try {
   // 보정 기본값이 바뀌었으면(trimVer) 저장된 보정 3개를 지워서 새 기본값을 씀 (다른 슬라이더는 그대로)
   if (saved.trimVer !== DEFAULTS.trimVer) {
     delete saved.trimHigh; delete saved.trimLow; delete saved.leftTrim; delete saved.trimVer;
+  }
+  if (saved.cornerVer !== DEFAULTS.cornerVer) {
+    delete saved.cornerInner; delete saved.cornerVer;
   }
   if (saved.turnVer !== DEFAULTS.turnVer) {
     delete saved.cornerInner; delete saved.pivot; delete saved.turnVer;
@@ -239,7 +247,9 @@ function compute(now, dt) {
   const left = K.has(KEYS.left), right = K.has(KEYS.right);
   const shift = K.has('ShiftLeft') || K.has('ShiftRight');
   const steerTarget = (right ? 1 : 0) - (left ? 1 : 0);
-  st.steer = approach(st.steer, steerTarget, STEER_RATE * dt);
+  // 달리면서 꺾일 때만 천천히 (제자리 회전과 키를 뗄 때는 바로)
+  const steerRate = (Math.abs(st.v) < 0.02 || steerTarget === 0) ? STEER_RATE : 1000 / P.steerMs;
+  st.steer = approach(st.steer, steerTarget, steerRate * dt);
 
   let mode;
   // 회전이 끝나면 멈춘 상태로 돌아감 (↑를 누르고 있으면 바로 출발)
@@ -291,8 +301,9 @@ function compute(now, dt) {
       mode = 'pivot';
     }
   } else {
-    const innerRatio = 1 + (P.cornerInner / 100 - 1) * Math.abs(st.steer);
-    const outer = st.v, inner = st.v * innerRatio;
+    const a = Math.abs(st.steer);
+    const outer = st.v * (1 + (P.cornerSpeed / 100 - 1) * a);
+    const inner = outer * (1 + (P.cornerInner / 100 - 1) * a);
     if (st.steer > 0) { L = outer; R = inner; }
     else if (st.steer < 0) { L = inner; R = outer; }
     else { L = R = st.v; }
