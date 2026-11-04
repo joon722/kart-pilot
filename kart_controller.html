@@ -131,7 +131,7 @@ if (WASD) {
 const DEFAULTS = {
   top: 100,         // ↑ 최고 속도 (%)
   slow: 45,         // ↑+Shift 저속 (%)
-  accelMs: 100,     // 0→최고까지 시간 (미션 2는 확 튀어 나가게. 출발 때 틀어지면 늘리기)
+  accelMs: 0,       // 0→최고까지 시간 (0 = 바로 최고. 출발 때 틀어지면 늘리기)
   cornerInner: 60,  // 코너: 안쪽 바퀴 = 바깥의 몇 % (낮을수록 많이 꺾임). TB6612는 힘을 뺄 때 브레이크가 걸려서 40이면 미끄러짐
   cornerSpeed: 85,  // 코너: 바깥 바퀴 속도 (%). 코너에서 조금 줄여서 안 미끄러지게
   steerMs: 100,     // 달리면서 꺾일 때 끝까지 꺾이는 시간. 실측: 200은 제어가 너무 느림 (키를 떼면 바로 펴짐)
@@ -148,6 +148,7 @@ const DEFAULTS = {
   leftTrim: 0,      // 왼쪽 모터 보정 (모든 속도에 더함). 팀원 −10은 양쪽 속도만 낮춰서 0으로
   cornerVer: 1,     // 코너 기본값을 바꿀 때 올리면, 저장된 코너 값이 한 번 새 기본값으로 바뀜
   steerVer: 1,      // 꺾이는 시간 기본값을 바꿀 때 올리면, 저장된 값이 한 번 새 기본값으로 바뀜
+  accelVer: 1,      // 가속 시간 기본값을 바꿀 때 올리면, 저장된 값이 한 번 새 기본값으로 바뀜
   trimVer: 3,       // 보정 기본값을 바꿀 때 올리면, 저장된 보정 3개가 한 번 새 기본값으로 바뀜
   turnVer: 1,       // 회전 기본값을 바꿀 때 올리면, 저장된 코너·제자리 회전 값이 한 번 새 기본값으로 바뀜
   uturnVer: 3,      // C키 시간 기본값을 바꿀 때 올리면, 저장된 C키 시간이 한 번 새 기본값으로 바뀜
@@ -178,6 +179,9 @@ try {
   // 보정 기본값이 바뀌었으면(trimVer) 저장된 보정 3개를 지워서 새 기본값을 씀 (다른 슬라이더는 그대로)
   if (saved.trimVer !== DEFAULTS.trimVer) {
     delete saved.trimHigh; delete saved.trimLow; delete saved.leftTrim; delete saved.trimVer;
+  }
+  if (saved.accelVer !== DEFAULTS.accelVer) {
+    delete saved.accelMs; delete saved.accelVer;
   }
   if (saved.steerVer !== DEFAULTS.steerVer) {
     delete saved.steerMs; delete saved.steerVer;
@@ -265,7 +269,7 @@ function compute(now, dt) {
   } else if (up && !down) {
     if (st.v < 0) st.v = 0;   // 후진 중이었으면 일단 0부터
     const target = (shift ? P.slow : P.top) / 100;
-    const rate = 1000 / P.accelMs;
+    const rate = 1000 / Math.max(1, P.accelMs);   // 0이어도 계산이 깨지지 않게 (시간 간격 0일 때 NaN 방지)
     st.v = st.v > target ? approach(st.v, target, 2 * rate * dt) : approach(st.v, target, rate * dt);
     st.braking = false; st.revOk = false;
     mode = shift ? 'slow' : 'drive';
@@ -281,7 +285,7 @@ function compute(now, dt) {
       else { st.braking = false; st.revOk = true; st.vEst = 0; }
     }
     if (st.revOk) {
-      st.v = approach(Math.min(st.v, 0), -P.reverse / 100, (1000 / P.accelMs) * dt);
+      st.v = approach(Math.min(st.v, 0), -P.reverse / 100, (1000 / Math.max(1, P.accelMs)) * dt);
       st.vEst = st.v;
       mode = 'reverse';
     }
