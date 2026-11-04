@@ -134,7 +134,7 @@ const DEFAULTS = {
   accelMs: 100,     // 0→최고까지 시간 (미션 2는 확 튀어 나가게. 출발 때 틀어지면 늘리기)
   cornerInner: 40,  // 코너: 안쪽 바퀴 = 바깥의 몇 % (낮을수록 많이 꺾임). 15면 코너 속도가 약 70%로 떨어져서 40으로
   pivot: 65,        // 제자리 회전 세기 (%). U턴을 빠르게 (40 → 65)
-  uturnMs: 500,     // C키 180° 회전 시간. 센서 없이 시간으로 도는 거라 건전지·바닥에 따라 실제로 맞춰야 함
+  uturnMs: 380,     // C키 회전 시간. 500은 180°보다 더 돌아서 줄임. 센서 없이 시간으로 도는 거라 건전지·바닥에 따라 실제로 맞춰야 함
   nudgePower: 50,   // Z/X 5° 회전 세기 (%). 45 아래는 차 코드의 출발 킥(255) 때문에 오히려 세짐
   nudgeMs: 40,      // Z/X 5° 회전 시간. 명령을 40ms마다 보내서 40ms 단위
   reverse: 55,      // 후진 속도 (%)
@@ -146,6 +146,7 @@ const DEFAULTS = {
   leftTrim: 0,      // 왼쪽 모터 보정 (모든 속도에 더함). 팀원 −10은 양쪽 속도만 낮춰서 0으로
   trimVer: 2,       // 보정 기본값을 바꿀 때 올리면, 저장된 보정 3개가 한 번 새 기본값으로 바뀜
   turnVer: 1,       // 회전 기본값을 바꿀 때 올리면, 저장된 코너·제자리 회전 값이 한 번 새 기본값으로 바뀜
+  uturnVer: 1,      // C키 시간 기본값을 바꿀 때 올리면, 저장된 C키 시간이 한 번 새 기본값으로 바뀜
 };
 const SLIDERS = [
   ['top', '↑ 최고 속도', 50, 100, 1, '%'],
@@ -174,6 +175,9 @@ try {
   }
   if (saved.turnVer !== DEFAULTS.turnVer) {
     delete saved.cornerInner; delete saved.pivot; delete saved.turnVer;
+  }
+  if (saved.uturnVer !== DEFAULTS.uturnVer) {
+    delete saved.uturnMs; delete saved.uturnVer;
   }
   Object.assign(P, saved);
 } catch {}
