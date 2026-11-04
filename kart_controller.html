@@ -135,8 +135,10 @@ const DEFAULTS = {
   cornerInner: 60,  // 코너: 안쪽 바퀴 = 바깥의 몇 % (낮을수록 많이 꺾임). TB6612는 힘을 뺄 때 브레이크가 걸려서 40이면 미끄러짐
   cornerSpeed: 85,  // 코너: 바깥 바퀴 속도 (%). 코너에서 조금 줄여서 안 미끄러지게
   steerMs: 100,     // 달리면서 꺾일 때 끝까지 꺾이는 시간. 실측: 200은 제어가 너무 느림 (키를 떼면 바로 펴짐)
-  exitCut: 30,      // 오른쪽으로 돈 직후 직진할 때 왼쪽 바퀴에서 뺄 힘 (최고 속도 기준). 미션 1: 오른쪽 바퀴가 바로 못 밀어서 계속 오른쪽으로 돎
+  exitCut: 0,       // 오른쪽으로 돈 직후 직진할 때 왼쪽 바퀴에서 뺄 힘 (최고 속도 기준). 30은 살짝 고칠 때마다 왼쪽으로 꺾일 수 있어서 기본은 끔
   exitMs: 400,      // 위 보정을 유지하는 시간
+  launchCut: 60,    // 멈춰 있다 출발할 때 왼쪽 바퀴에서 뺄 힘. 실측: 출발 순간에만 오른쪽으로 틀어지고 그 뒤는 곧게 감
+  launchMs: 200,    // 위 보정을 유지하는 시간
   pivot: 65,        // 제자리 회전 세기 (%). U턴을 빠르게 (40 → 65)
   uturnMs: 340,     // C키 회전 시간. 실측: 500은 180°보다 더, 380(실제 360)은 약 10° 더, 330은 약 5° 덜 돎. 센서 없이 시간으로 도는 거라 건전지·바닥에 따라 실제로 맞춰야 함
   nudgePower: 50,   // Z/X 5° 회전 세기 (%). 45 아래는 차 코드의 출발 킥(255) 때문에 오히려 세짐
@@ -150,6 +152,7 @@ const DEFAULTS = {
   leftTrim: 0,      // 왼쪽 모터 보정 (모든 속도에 더함). 팀원 −10은 양쪽 속도만 낮춰서 0으로
   cornerVer: 1,     // 코너 기본값을 바꿀 때 올리면, 저장된 코너 값이 한 번 새 기본값으로 바뀜
   steerVer: 1,      // 꺾이는 시간 기본값을 바꿀 때 올리면, 저장된 값이 한 번 새 기본값으로 바뀜
+  exitVer: 1,       // 코너 뒤 힘 빼기 기본값을 바꿀 때 올리면, 저장된 값이 한 번 새 기본값으로 바뀜
   accelVer: 1,      // 가속 시간 기본값을 바꿀 때 올리면, 저장된 값이 한 번 새 기본값으로 바뀜
   trimVer: 3,       // 보정 기본값을 바꿀 때 올리면, 저장된 보정 3개가 한 번 새 기본값으로 바뀜
   turnVer: 1,       // 회전 기본값을 바꿀 때 올리면, 저장된 코너·제자리 회전 값이 한 번 새 기본값으로 바뀜
@@ -164,6 +167,8 @@ const SLIDERS = [
   ['steerMs', '코너 꺾이는 시간 (길면 부드러움)', 40, 500, 20, 'ms'],
   ['exitCut', '오른쪽 코너 뒤 왼쪽 힘 빼기 (0 = 끔)', 0, 80, 1, ''],
   ['exitMs', '오른쪽 코너 뒤 힘 빼는 시간', 0, 1000, 20, 'ms'],
+  ['launchCut', '출발할 때 왼쪽 힘 빼기 (0 = 끔)', 0, 150, 1, ''],
+  ['launchMs', '출발할 때 힘 빼는 시간', 0, 600, 20, 'ms'],
   ['pivot', '제자리 회전 세기', 20, 100, 1, '%'],
   ['uturnMs', 'C키 180° 회전 시간', 100, 1500, 10, 'ms'],
   ['nudgePower', 'Z/X 5° 회전 세기', 45, 100, 1, '%'],
@@ -183,6 +188,9 @@ try {
   // 보정 기본값이 바뀌었으면(trimVer) 저장된 보정 3개를 지워서 새 기본값을 씀 (다른 슬라이더는 그대로)
   if (saved.trimVer !== DEFAULTS.trimVer) {
     delete saved.trimHigh; delete saved.trimLow; delete saved.leftTrim; delete saved.trimVer;
+  }
+  if (saved.exitVer !== DEFAULTS.exitVer) {
+    delete saved.exitCut; delete saved.exitVer;
   }
   if (saved.accelVer !== DEFAULTS.accelVer) {
     delete saved.accelMs; delete saved.accelVer;
@@ -248,7 +256,7 @@ function startSpin() {
 }
 
 // ---------------- 주행 계산 (카트라이더식) ----------------
-const st = { v: 0, vEst: 0, steer: 0, brakeEnd: 0, braking: false, revOk: false, spinStart: 0, spinEnd: 0, nudgeDir: 0, nudgeTicks: 0, lastRight: -1e9 };
+const st = { v: 0, vEst: 0, steer: 0, brakeEnd: 0, braking: false, revOk: false, spinStart: 0, spinEnd: 0, nudgeDir: 0, nudgeTicks: 0, lastRight: -1e9, wasUp: false, launchEnd: 0 };
 const STEER_RATE = 9;     // 조향이 0→끝까지 가는 빠르기 (/초)
 const COAST_DECAY = 1.6;  // 손 뗐을 때 실제 차가 느려지는 정도 추정 (/초)
 const approach = (x, t, d) => x < t ? Math.min(t, x + d) : Math.max(t, x - d);
@@ -263,6 +271,8 @@ function compute(now, dt) {
   const steerRate = (Math.abs(st.v) < 0.02 || steerTarget === 0) ? STEER_RATE : 1000 / P.steerMs;
   st.steer = approach(st.steer, steerTarget, steerRate * dt);
   if (steerTarget > 0 || st.spinEnd) st.lastRight = now;   // 오른쪽으로 돌고 있는 마지막 시각 (C키도 오른쪽으로 돎)
+  if (up && !st.wasUp && st.vEst < 0.3) st.launchEnd = now + P.launchMs;   // 멈춰 있다 ↑를 누른 순간
+  st.wasUp = up;
 
   let mode;
   // 회전이 끝나면 멈춘 상태로 돌아감 (↑를 누르고 있으면 바로 출발)
@@ -329,9 +339,10 @@ function compute(now, dt) {
   }
   modeName = mode;
   let l = toPwm(L, false), r = toPwm(R, true);
-  // 오른쪽으로 돈 직후 직진: 오른쪽 바퀴가 바로 못 밀어서 차가 계속 도니까 잠깐 왼쪽 힘을 뺌
-  if ((mode === 'drive' || mode === 'slow') && steerTarget === 0 && now - st.lastRight < P.exitMs) {
-    l = Math.max(0, Math.round(l - P.exitCut * st.v));
+  // 오른쪽으로 돈 직후와 출발 직후: 오른쪽 바퀴가 바로 못 밀어서 차가 오른쪽으로 도니까 잠깐 왼쪽 힘을 뺌
+  if ((mode === 'drive' || mode === 'slow') && steerTarget === 0) {
+    const cut = Math.max(now - st.lastRight < P.exitMs ? P.exitCut : 0, now < st.launchEnd ? P.launchCut : 0);
+    if (cut) l = Math.max(0, Math.round(l - cut * st.v));
   }
   // 한쪽이 255를 넘으면(+ 보정) 넘친 만큼 양쪽을 줄임 → 최고 속도에서도 + 보정이 먹음
   const over = Math.max(Math.abs(l), Math.abs(r)) - 255;
