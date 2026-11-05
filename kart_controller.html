@@ -130,7 +130,8 @@ if (WASD) {
 // ---------------- 세팅 ----------------
 const DEFAULTS = {
   top: 100,         // ↑ 최고 속도 (%)
-  slow: 45,         // ↑+Shift 저속 (%)
+  slow: 60,         // ↑+Shift 저속 (%). 45는 너무 느림
+  slowVer: 1,       // 저속 기본값을 바꿀 때 올리면, 저장된 저속 값이 한 번 새 기본값으로 바뀜
   accelMs: 300,     // 0→최고까지 시간. 영상 실측(11/5): 0이면 출발마다 왼쪽·오른쪽으로 다르게 틀어짐. 미션 1도 0.3초 가속으로 해결
   cornerInner: 60,  // 코너: 안쪽 바퀴 = 바깥의 몇 % (낮을수록 많이 꺾임). TB6612는 힘을 뺄 때 브레이크가 걸려서 40이면 미끄러짐
   cornerSpeed: 85,  // 코너: 바깥 바퀴 속도 (%). 코너에서 조금 줄여서 안 미끄러지게
@@ -168,7 +169,11 @@ const SLIDERS = [
 ];
 const STORE = 'kartPilotSettings.v4';   // 이름을 바꾸면 전에 저장된 세팅을 안 읽음 (v4: 쌓인 값 전부 정리)
 let P = { ...DEFAULTS };
-try { Object.assign(P, JSON.parse(localStorage.getItem(STORE) || '{}')); } catch {}
+try {
+  const saved = JSON.parse(localStorage.getItem(STORE) || '{}');
+  if (saved.slowVer !== DEFAULTS.slowVer) { delete saved.slow; delete saved.slowVer; }
+  Object.assign(P, saved);
+} catch {}
 const save = () => { try { localStorage.setItem(STORE, JSON.stringify(P)); } catch {} };
 
 const $ = id => document.getElementById(id);
