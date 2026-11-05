@@ -92,7 +92,7 @@
         <tr><td>↓</td><td>달리는 중이면 <b>브레이크</b>, 멈추면 <b>후진</b></td></tr>
         <tr><td>↑ + ← →</td><td>코너</td></tr>
         <tr><td>← → 만</td><td>제자리 회전</td></tr>
-        <tr><td>Z / X</td><td>왼쪽 / 오른쪽으로 <b>약 5°씩</b> 살짝 돌기</td></tr>
+        <tr><td>Z / X</td><td><b>누르는 동안</b> 왼쪽 / 오른쪽으로 돌기 (톡 누르면 살짝)</td></tr>
         <tr><td>C</td><td><b>제자리 180° 회전</b> (오른쪽으로 · 달리는 중이면 브레이크 먼저)</td></tr>
         <tr><td>손 뗌</td><td>힘 끔 (굴러가다 섬) · Esc 비상 정지</td></tr>
       </table>
@@ -138,8 +138,9 @@ const DEFAULTS = {
   steerMs: 140,     // 달리면서 꺾일 때 끝까지 꺾이는 시간. 실측: 200은 너무 느리고 100은 살짝 눌러도 너무 돎 (키를 떼면 바로 펴짐)
   pivot: 45,        // 제자리 회전 세기 (%). C키는 따로 65 고정
   uturnMs: 310,     // C키 회전 시간. 영상 실측(11/5): 340에서 평균 196°(192~202°), 끝날 때 약 0.49°/ms → 310이면 약 180°. 센서 없이 시간으로 도는 거라 건전지·바닥에 따라 실제로 맞춰야 함
-  nudgePower: 50,   // Z/X 5° 회전 세기 (%)
-  nudgeMs: 40,      // Z/X 5° 회전 시간. 명령을 40ms마다 보내서 40ms 단위
+  nudgePower: 25,   // Z/X 회전 세기 (%). 좌우키(45%)보다 확실히 느리게
+  nudgeVer: 1,      // Z/X 기본값을 바꿀 때 올리면, 저장된 Z/X 세기가 한 번 새 기본값으로 바뀜
+  nudgeMs: 40,      // Z/X를 톡 눌러도 최소한 도는 시간. 명령을 40ms마다 보내서 40ms 단위
   reverse: 55,      // 후진 속도 (%)
   brakePower: 70,   // 브레이크 세기 (%)
   brakeMs: 180,     // 최고 속도에서 브레이크 시간 (느리면 비례해서 짧게)
@@ -157,8 +158,8 @@ const SLIDERS = [
   ['steerMs', '코너 꺾이는 시간 (길면 부드러움)', 40, 500, 20, 'ms'],
   ['pivot', '제자리 회전 세기', 20, 100, 1, '%'],
   ['uturnMs', 'C키 180° 회전 시간', 100, 1500, 10, 'ms'],
-  ['nudgePower', 'Z/X 5° 회전 세기', 45, 100, 1, '%'],
-  ['nudgeMs', 'Z/X 5° 회전 시간', 40, 200, 40, 'ms'],
+  ['nudgePower', 'Z/X 회전 세기', 20, 100, 1, '%'],
+  ['nudgeMs', 'Z/X 톡 눌렀을 때 도는 시간', 40, 200, 40, 'ms'],
   ['reverse', '후진 속도', 20, 100, 1, '%'],
   ['brakePower', '브레이크 세기', 20, 100, 1, '%'],
   ['brakeMs', '브레이크 시간(최고속 기준)', 0, 400, 10, 'ms'],
@@ -172,6 +173,7 @@ let P = { ...DEFAULTS };
 try {
   const saved = JSON.parse(localStorage.getItem(STORE) || '{}');
   if (saved.slowVer !== DEFAULTS.slowVer) { delete saved.slow; delete saved.slowVer; }
+  if (saved.nudgeVer !== DEFAULTS.nudgeVer) { delete saved.nudgePower; delete saved.nudgeVer; }
   Object.assign(P, saved);
 } catch {}
 const save = () => { try { localStorage.setItem(STORE, JSON.stringify(P)); } catch {} };
@@ -195,14 +197,14 @@ buildTune();
 
 // ---------------- 키보드 ----------------
 const K = new Set();
-const USED = [KEYS.up, KEYS.down, KEYS.left, KEYS.right, 'ShiftLeft', 'ShiftRight'];
+const USED = [KEYS.up, KEYS.down, KEYS.left, KEYS.right, 'ShiftLeft', 'ShiftRight', 'KeyZ', 'KeyX'];
 window.addEventListener('keydown', e => {
   if (e.code === 'Escape') { emergency(); return; }
   if (e.code === 'KeyC') { if (!e.repeat && !st.spinEnd) startSpin(); return; }
-  if (e.code === 'KeyZ' || e.code === 'KeyX') {
-    // 한 번 누르면 한 번만 (누르고 있어도 반복 안 함). 시간 대신 전송 횟수로 세서 길이가 일정함
-    if (!e.repeat && !st.spinEnd) { st.nudgeDir = e.code === 'KeyX' ? 1 : -1; st.nudgeTicks = Math.max(1, Math.round(P.nudgeMs / 40)); }
-    return;
+  // Z/X: 누르는 동안 돎. 톡 눌러도 최소 횟수는 보냄 (시간 대신 전송 횟수로 세서 길이가 일정함)
+  if ((e.code === 'KeyZ' || e.code === 'KeyX') && !e.repeat && !st.spinEnd) {
+    st.nudgeDir = e.code === 'KeyX' ? 1 : -1;
+    st.nudgeTicks = Math.max(1, Math.round(P.nudgeMs / 40));
   }
   if (USED.includes(e.code)) { e.preventDefault(); K.add(e.code); }
 });
@@ -294,10 +296,12 @@ function compute(now, dt) {
     else if (st.steer < 0) { L = inner; R = outer; }
     else { L = R = st.v; }
   }
-  // Z/X: 정해진 횟수만큼만 제자리 회전 값을 보냄
-  if (st.nudgeTicks > 0) {
-    st.nudgeTicks--;
-    L = st.nudgeDir * P.nudgePower / 100; R = -L;
+  // Z/X: 누르고 있거나 최소 횟수가 남아 있는 동안 제자리 회전 값을 보냄 (C키로 도는 중에는 안 함)
+  const zx = (K.has('KeyX') ? 1 : 0) - (K.has('KeyZ') ? 1 : 0);
+  if (!st.spinEnd && (zx !== 0 || st.nudgeTicks > 0)) {
+    const dir = zx !== 0 ? zx : st.nudgeDir;
+    if (st.nudgeTicks > 0) st.nudgeTicks--;
+    L = dir * P.nudgePower / 100; R = -L;
     mode = 'pivot';
   }
   modeName = mode;
