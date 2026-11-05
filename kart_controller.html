@@ -131,13 +131,13 @@ if (WASD) {
 const DEFAULTS = {
   top: 100,         // ↑ 최고 속도 (%)
   slow: 45,         // ↑+Shift 저속 (%)
-  accelMs: 0,       // 0→최고까지 시간 (0 = 바로 최고. 출발 때 틀어지면 늘리기)
+  accelMs: 300,     // 0→최고까지 시간. 영상 실측(11/5): 0이면 출발마다 왼쪽·오른쪽으로 다르게 틀어짐. 미션 1도 0.3초 가속으로 해결
   cornerInner: 60,  // 코너: 안쪽 바퀴 = 바깥의 몇 % (낮을수록 많이 꺾임). TB6612는 힘을 뺄 때 브레이크가 걸려서 40이면 미끄러짐
   cornerSpeed: 85,  // 코너: 바깥 바퀴 속도 (%). 코너에서 조금 줄여서 안 미끄러지게
   steerMs: 140,     // 달리면서 꺾일 때 끝까지 꺾이는 시간. 실측: 200은 너무 느리고 100은 살짝 눌러도 너무 돎 (키를 떼면 바로 펴짐)
   exitCut: 0,       // 오른쪽으로 돈 직후 직진할 때 왼쪽 바퀴에서 뺄 힘 (최고 속도 기준). 30은 살짝 고칠 때마다 왼쪽으로 꺾일 수 있어서 기본은 끔
   exitMs: 400,      // 위 보정을 유지하는 시간
-  launchCut: 60,    // 멈춰 있다 출발할 때 왼쪽 바퀴에서 뺄 힘. 실측: 출발 순간에만 오른쪽으로 틀어지고 그 뒤는 곧게 감
+  launchCut: 0,     // 멈춰 있다 출발할 때 왼쪽 바퀴에서 뺄 힘. 영상 실측: 틀어지는 방향이 매번 달라서 기본은 끔
   launchMs: 200,    // 위 보정을 유지하는 시간
   pivot: 65,        // 제자리 회전 세기 (%). U턴을 빠르게 (40 → 65)
   uturnMs: 310,     // C키 회전 시간. 영상 실측(11/5): 340에서 평균 196°(192~202°), 끝날 때 약 0.49°/ms → 310이면 약 180°. 센서 없이 시간으로 도는 거라 건전지·바닥에 따라 실제로 맞춰야 함
@@ -153,7 +153,7 @@ const DEFAULTS = {
   cornerVer: 1,     // 코너 기본값을 바꿀 때 올리면, 저장된 코너 값이 한 번 새 기본값으로 바뀜
   steerVer: 2,      // 꺾이는 시간 기본값을 바꿀 때 올리면, 저장된 값이 한 번 새 기본값으로 바뀜
   exitVer: 1,       // 코너 뒤 힘 빼기 기본값을 바꿀 때 올리면, 저장된 값이 한 번 새 기본값으로 바뀜
-  accelVer: 1,      // 가속 시간 기본값을 바꿀 때 올리면, 저장된 값이 한 번 새 기본값으로 바뀜
+  accelVer: 2,      // 가속 시간·출발 보정 기본값을 바꿀 때 올리면, 저장된 값이 한 번 새 기본값으로 바뀜
   trimVer: 3,       // 보정 기본값을 바꿀 때 올리면, 저장된 보정 3개가 한 번 새 기본값으로 바뀜
   turnVer: 1,       // 회전 기본값을 바꿀 때 올리면, 저장된 코너·제자리 회전 값이 한 번 새 기본값으로 바뀜
   uturnVer: 4,      // C키 시간 기본값을 바꿀 때 올리면, 저장된 C키 시간이 한 번 새 기본값으로 바뀜
@@ -193,7 +193,7 @@ try {
     delete saved.exitCut; delete saved.exitVer;
   }
   if (saved.accelVer !== DEFAULTS.accelVer) {
-    delete saved.accelMs; delete saved.accelVer;
+    delete saved.accelMs; delete saved.launchCut; delete saved.accelVer;
   }
   if (saved.steerVer !== DEFAULTS.steerVer) {
     delete saved.steerMs; delete saved.steerVer;
