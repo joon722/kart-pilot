@@ -139,7 +139,7 @@ const DEFAULTS = {
   exitMs: 400,      // 위 보정을 유지하는 시간
   launchCut: 0,     // 멈춰 있다 출발할 때 왼쪽 바퀴에서 뺄 힘. 영상 실측: 틀어지는 방향이 매번 달라서 기본은 끔
   launchMs: 200,    // 위 보정을 유지하는 시간
-  pivot: 65,        // 제자리 회전 세기 (%). U턴을 빠르게 (40 → 65)
+  pivot: 45,        // 제자리 회전 세기 (%). 65는 돈 뒤 바로 직진하면 계속 빙글빙글 돌아서 줄임 (C키는 따로 65 고정)
   uturnMs: 310,     // C키 회전 시간. 영상 실측(11/5): 340에서 평균 196°(192~202°), 끝날 때 약 0.49°/ms → 310이면 약 180°. 센서 없이 시간으로 도는 거라 건전지·바닥에 따라 실제로 맞춰야 함
   nudgePower: 50,   // Z/X 5° 회전 세기 (%). 45 아래는 차 코드의 출발 킥(255) 때문에 오히려 세짐
   nudgeMs: 40,      // Z/X 5° 회전 시간. 명령을 40ms마다 보내서 40ms 단위
@@ -151,6 +151,7 @@ const DEFAULTS = {
   trimLow: 10,      // 직진 보정 (느릴 때). +25는 L293D 때 값이라 좌우 코너가 달라져서 줄임
   leftTrim: 0,      // 왼쪽 모터 보정 (모든 속도에 더함). 팀원 −10은 양쪽 속도만 낮춰서 0으로
   cornerVer: 1,     // 코너 기본값을 바꿀 때 올리면, 저장된 코너 값이 한 번 새 기본값으로 바뀜
+  pivotVer: 1,      // 제자리 회전 기본값을 바꿀 때 올리면, 저장된 값이 한 번 새 기본값으로 바뀜
   steerVer: 2,      // 꺾이는 시간 기본값을 바꿀 때 올리면, 저장된 값이 한 번 새 기본값으로 바뀜
   exitVer: 1,       // 코너 뒤 힘 빼기 기본값을 바꿀 때 올리면, 저장된 값이 한 번 새 기본값으로 바뀜
   accelVer: 2,      // 가속 시간·출발 보정 기본값을 바꿀 때 올리면, 저장된 값이 한 번 새 기본값으로 바뀜
@@ -194,6 +195,9 @@ try {
   }
   if (saved.accelVer !== DEFAULTS.accelVer) {
     delete saved.accelMs; delete saved.launchCut; delete saved.accelVer;
+  }
+  if (saved.pivotVer !== DEFAULTS.pivotVer) {
+    delete saved.pivot; delete saved.pivotVer;
   }
   if (saved.steerVer !== DEFAULTS.steerVer) {
     delete saved.steerMs; delete saved.steerVer;
@@ -258,6 +262,7 @@ function startSpin() {
 // ---------------- 주행 계산 (카트라이더식) ----------------
 const st = { v: 0, vEst: 0, steer: 0, brakeEnd: 0, braking: false, revOk: false, spinStart: 0, spinEnd: 0, nudgeDir: 0, nudgeTicks: 0, lastRight: -1e9, wasUp: false, launchEnd: 0 };
 const STEER_RATE = 9;     // 조향이 0→끝까지 가는 빠르기 (/초)
+const SPIN_POWER = 65;    // C키 회전 세기 (%). 영상으로 맞춘 C키 각도가 바뀌지 않게 제자리 회전 세기와 따로 둠
 const COAST_DECAY = 1.6;  // 손 뗐을 때 실제 차가 느려지는 정도 추정 (/초)
 const approach = (x, t, d) => x < t ? Math.min(t, x + d) : Math.max(t, x - d);
 let modeName = 'coast';
@@ -316,7 +321,7 @@ function compute(now, dt) {
   if (mode === 'brake') {
     L = R = -P.brakePower / 100;
   } else if (mode === 'spin') {
-    L = P.pivot / 100; R = -L;   // 오른쪽으로 돎
+    L = SPIN_POWER / 100; R = -L;   // 오른쪽으로 돎
   } else if (Math.abs(st.v) < 0.02) {
     if ((left || right) && st.steer !== 0) {
       const p = (P.pivot / 100) * Math.abs(st.steer);
